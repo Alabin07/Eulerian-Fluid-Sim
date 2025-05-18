@@ -1,103 +1,120 @@
+#define SDL_MAIN_USE_CALLBACKS 1
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_main.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include <math.h>
 
-#define GRID_WIDTH 64
-#define GRID_HEIGHT 64
+static SDL_Window *window = NULL;
+static SDL_Renderer *renderer = NULL;
+
 #define WINDOW_SIZE 800
+#define GRID_X 128
+#define GRID_Y 128
 
-float** create_density_grid(int width, int height) {
-    float** grid = malloc(width * sizeof(float*));
-    for (int i = 0; i < width; i++) {
-        grid[i] = malloc(height * sizeof(float));
-        for (int j = 0; j < height; j++) {
-            // Example: simple wave pattern
-            grid[i][j] = 0.5f + 0.5f * sinf(i * 0.2f) * sinf(j * 0.2f);
+static float** density = NULL;
+
+void DrawFilledCircle(SDL_Renderer* renderer, int x0, int y0, int radius) {
+    int x = radius;
+    int y = 0;
+    int err = 0;
+
+    while (x >= y) {
+        SDL_RenderLine(renderer, x0 - x, y0 + y, x0 + x, y0 + y);
+        SDL_RenderLine(renderer, x0 - x, y0 - y, x0 + x, y0 - y);
+        SDL_RenderLine(renderer, x0 - y, y0 + x, x0 + y, y0 + x);
+        SDL_RenderLine(renderer, x0 - y, y0 - x, x0 + y, y0 - x);
+
+        if (err <= 0) {
+            y += 1;
+            err += 2*y + 1;
+        }
+        if (err > 0) {
+            x -= 1;
+            err -= 2*x + 1;
         }
     }
-    return grid;
 }
 
-void free_density_grid(float** grid, int width) {
-    for (int i = 0; i < width; i++) {
-        free(grid[i]);
+void InitParticles() {
+    density = malloc(GRID_X * sizeof(float*));
+    for (int i = 0; i < GRID_X; ++i) {
+        density[i] = malloc(GRID_Y * sizeof(float));
+        for (int j = 0; j < GRID_Y; ++j) {
+            // Example: wave pattern
+            density[i][j] = 0.5f + 0.5f * sinf(i * 0.2f) * sinf(j * 0.2f);
+        }
     }
-    free(grid);
 }
 
-void render_density(SDL_Renderer* renderer, float** density, int rows, int cols) {
-    float cellWidth = (float)WINDOW_SIZE / cols;
-    float cellHeight = (float)WINDOW_SIZE / rows;
+void FreeParticles() {
+    if (!density) return;
+    for (int i = 0; i < GRID_X; ++i) {
+        free(density[i]);
+    }
+    free(density);
+    density = NULL;
+}
 
-    for (int i = 0; i < cols; i++) {
-        for (int j = 0; j < rows; j++) {
-            float d = density[i][j];
-            if (d > 1.0f) d = 1.0f;
+void RenderDensity(SDL_Renderer* renderer, float** field, int width, int height) {
+    float cellW = (float)WINDOW_SIZE / width;
+    float cellH = (float)WINDOW_SIZE / height;
+
+    for (int i = 0; i < width; ++i) {
+        for (int j = 0; j < height; ++j) {
+            float d = field[i][j];
             if (d < 0.0f) d = 0.0f;
+            if (d > 1.0f) d = 1.0f;
 
             Uint8 color = (Uint8)(d * 255);
             SDL_SetRenderDrawColor(renderer, color, color, color, 255);
 
             SDL_FRect rect = {
-                .x = i * cellWidth,
-                .y = j * cellHeight,
-                .w = cellWidth,
-                .h = cellHeight
+                .x = i * cellW,
+                .y = j * cellH,
+                .w = cellW,
+                .h = cellH
             };
             SDL_RenderFillRect(renderer, &rect);
         }
     }
 }
 
-int main(int argc, char* argv[]) {
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-        SDL_Log("SDL_Init Error: %s\n", SDL_GetError());
-        return 1;
+
+
+
+SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
+    SDL_SetAppMetadata("Fluid Simulation", "1.0", "com.example.fluid-renderer");
+
+    if (SDL_Init(SDL_INIT_VIDEO) < 0)
+        return SDL_APP_FAILURE;
+
+    if (SDL_CreateWindowAndRenderer("Fluid Grid", WINDOW_SIZE, WINDOW_SIZE, 0, &window, &renderer) < 0)
+        return SDL_APP_FAILURE;
+
+    InitParticles();
+    return SDL_APP_CONTINUE;
+}
+
+SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event) {
+    if (event->type == SDL_EVENT_QUIT) {
+        return SDL_APP_SUCCESS;
     }
+    return SDL_APP_CONTINUE;
+}
 
-    SDL_Window* window = SDL_CreateWindow("Fluid Grid",
-                                          WINDOW_SIZE, WINDOW_SIZE,
-                                          SDL_WINDOW_RESIZABLE);
-    if (!window) {
-        SDL_Log("SDL_CreateWindow Error: %s\n", SDL_GetError());
-        SDL_Quit();
-        return 1;
-    }
+SDL_AppResult SDL_AppIterate(void *appstate) {
+    SDL_SetRenderDrawColorFloat(renderer, 0.0f, 0.0f, 0.5f, 1.0f);
+    SDL_RenderClear(renderer);
 
-    SDL_Renderer* renderer = SDL_CreateRenderer(window, NULL, SDL_RENDERER_ACCELERATED);
-    if (!renderer) {
-        SDL_Log("SDL_CreateRenderer Error: %s\n", SDL_GetError());
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return 1;
-    }
+    RenderDensity(renderer, density, GRID_X, GRID_Y);
 
-    float** density = create_density_grid(GRID_WIDTH, GRID_HEIGHT);
+    SDL_RenderPresent(renderer);
+    SDL_Delay(16); // ~60 FPS
+    return SDL_APP_CONTINUE;
+}
 
-    bool running = true;
-    SDL_Event event;
-
-    while (running) {
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_EVENT_QUIT)
-                running = false;
-        }
-
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-        SDL_RenderClear(renderer);
-
-        render_density(renderer, density, GRID_HEIGHT, GRID_WIDTH);
-
-        SDL_RenderPresent(renderer);
-
-        SDL_Delay(16);  // ~60 FPS
-    }
-
-    free_density_grid(density, GRID_WIDTH);
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
-
-    return 0;
+void SDL_AppQuit(void *appstate, SDL_AppResult result) {
+    FreeParticles();
+    /* SDL handles cleanup for window/renderer */
 }

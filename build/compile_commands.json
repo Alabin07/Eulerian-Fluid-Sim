@@ -1,0 +1,8 @@
+[
+{
+  "directory": "/home/alabin/Development/Eulerian-Fluid-Sim/build",
+  "command": "/usr/bin/gcc   -g -std=gnu17 -o CMakeFiles/fluid_sim.dir/main.c.o -c /home/alabin/Development/Eulerian-Fluid-Sim/main.c",
+  "file": "/home/alabin/Development/Eulerian-Fluid-Sim/main.c",
+  "output": "CMakeFiles/fluid_sim.dir/main.c.o"
+}
+]

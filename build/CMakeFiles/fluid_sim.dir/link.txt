@@ -1,0 +1,1 @@
+/usr/bin/gcc -g -Wl,--dependency-file=CMakeFiles/fluid_sim.dir/link.d CMakeFiles/fluid_sim.dir/main.c.o -o fluid_sim  -Wl,-rpath,/usr/local/lib64 /usr/local/lib64/libSDL3.so.0.3.0 -lm
